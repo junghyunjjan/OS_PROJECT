@@ -606,7 +606,17 @@ priority_compare(const struct list_elem *a_, const struct list_elem *b_, void *a
 {
   const struct thread *a = list_entry(a_, struct thread, elem);
   const struct thread *b = list_entry(b_, struct thread, elem);
-  return a->priority > b->priority;
+
+  return a->priority >= b->priority;
+}
+
+/* Compare function for donation thread priority. */
+bool
+donation_priority_compare(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED)
+{
+  const struct thread *a = list_entry(a_, struct thread, donation_thread_elem);
+  const struct thread *b = list_entry(b_, struct thread, donation_thread_elem);
+  return a->priority >= b->priority;
 }
 
 /* Priority control. */
@@ -620,8 +630,8 @@ change_priority(struct thread *t)
   }
   else
   {
-    struct list_elem *max_elem = list_min(donation_thread_list, priority_compare, NULL);
-    struct thread *max_priority_thread = list_entry(max_elem, struct thread, donation_thread_elem);
+    struct list_elem *max_elem = list_min(donation_thread_list, donation_priority_compare, NULL);
+    struct thread *max_priority_thread = list_entry(max_elem, struct thread, donation_thread_elem);    
     t->priority = max_priority_thread->priority;
   }
   list_sort(&ready_list, priority_compare, NULL);
@@ -632,7 +642,7 @@ void
 priority_donation(struct thread *t)
 {
   struct thread *cur = thread_current();
-  list_insert_ordered(&t->donation_thread_list, &cur->elem, priority_compare, NULL);
+  list_insert_ordered(&t->donation_thread_list, &cur->donation_thread_elem, donation_priority_compare, NULL);
   change_priority(t);
 }
 

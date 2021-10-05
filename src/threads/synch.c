@@ -201,17 +201,16 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
   
   struct thread *cur = thread_current();
-  /*
+
   if(lock->holder != NULL)
   {
     cur->holded_lock = lock;
-    list_insert_ordered(&lock->holder->donation_thread_list, &cur->donation_thread_elem, priority_compare, NULL);
     priority_donation(lock->holder);
   }
-  */
+
   sema_down (&lock->semaphore);
   cur = thread_current();
-  //cur->holded_lock = NULL;
+  cur->holded_lock = NULL;
   lock->holder = cur;
 }
 
@@ -245,7 +244,7 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-/*
+
   struct thread *cur = thread_current();
   for (struct list_elem *iterator = list_begin(&cur->donation_thread_list);
        iterator != list_end(&cur->donation_thread_list);
@@ -254,11 +253,11 @@ lock_release (struct lock *lock)
     struct thread *t = list_entry(iterator, struct thread, donation_thread_elem);
     if(t->holded_lock == lock)
     {
-      list_remove(iterator);
+      list_remove(&t->donation_thread_elem);
       change_priority(cur);
     }
   }
-*/
+
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
@@ -273,7 +272,7 @@ lock_held_by_current_thread (const struct lock *lock)
 
   return lock->holder == thread_current ();
 }
-
+
 /* One semaphore in a list. */
 struct semaphore_elem 
   {

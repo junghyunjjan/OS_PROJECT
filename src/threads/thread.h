@@ -146,7 +146,8 @@ int thread_get_load_avg (void);
 
 /* Priority Scheduler */
 void preemption(void);
-bool priority_compare(const struct list_elem *a_, const struct list_elem *b_, void *aux UNUSED);
+bool priority_compare(const struct list_elem *a_, const struct list_elem *b_, void *aux);
+bool donation_priority_compare(const struct list_elem *a_, const struct list_elem *b_, void *aux);
 void change_priority(struct thread *t);
 void priority_donation(struct thread *t);
 
