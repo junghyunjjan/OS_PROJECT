@@ -336,8 +336,10 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  thread_current ()->initial_priority = new_priority;
+  struct thread *cur = thread_current();
+  if(list_empty(&cur->donation_thread_list))
+    cur->priority = new_priority;
+  cur->initial_priority = new_priority;
   preemption();
 }
 
@@ -607,7 +609,7 @@ priority_compare(const struct list_elem *a_, const struct list_elem *b_, void *a
   const struct thread *a = list_entry(a_, struct thread, elem);
   const struct thread *b = list_entry(b_, struct thread, elem);
 
-  return a->priority >= b->priority;
+  return a->priority > b->priority;
 }
 
 /* Compare function for donation thread priority. */
@@ -616,7 +618,7 @@ donation_priority_compare(const struct list_elem *a_, const struct list_elem *b_
 {
   const struct thread *a = list_entry(a_, struct thread, donation_thread_elem);
   const struct thread *b = list_entry(b_, struct thread, donation_thread_elem);
-  return a->priority >= b->priority;
+  return a->priority > b->priority;
 }
 
 /* Priority control. */
@@ -642,8 +644,15 @@ void
 priority_donation(struct thread *t)
 {
   struct thread *cur = thread_current();
+  cur->donating_thread = t;
   list_insert_ordered(&t->donation_thread_list, &cur->donation_thread_elem, donation_priority_compare, NULL);
   change_priority(t);
+  struct thread *nest_iterator = t;
+  while(nest_iterator->donating_thread != NULL)
+  {
+    change_priority(nest_iterator->donating_thread);
+    nest_iterator = nest_iterator->donating_thread;
+  }
 }
 
 /* Offset of `stack' member within `struct thread'.

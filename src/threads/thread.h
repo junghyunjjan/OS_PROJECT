@@ -96,6 +96,7 @@ struct thread
     /* Additional memebers for priority donation. */
     int initial_priority;
     struct lock *holded_lock;
+    struct thread* donating_thread;     /* This give priority to thread! if not donate, NULL. */
     struct list donation_thread_list;
     struct list_elem donation_thread_elem;
 
