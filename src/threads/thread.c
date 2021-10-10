@@ -28,6 +28,9 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
+/* List of processes which is sleeping. */
+static struct list sleep_list;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -92,6 +95,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -470,6 +474,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->initial_priority = priority;
   t->magic = THREAD_MAGIC;
   t->holded_lock = NULL;
+  t->sleep_time = -1;
 
   old_level = intr_disable ();
   list_init(&t->donation_thread_list);
@@ -654,6 +659,42 @@ priority_donation(struct thread *t)
     nest_iterator = nest_iterator->donating_thread;
   }
 }
+
+/* Sleep thread. */
+void thread_sleep(int time)
+{
+  struct thread *cur = thread_current();
+  enum intr_level old_level;
+  
+  ASSERT(!intr_context());
+  old_level = intr_disable();
+  ASSERT(cur != idle_thread);
+  cur->sleep_time = time;
+  list_push_back(&sleep_list, &cur->sleepelem);
+  thread_block();
+  intr_set_level(old_level);
+}
+
+/* Awake thrad. */
+void thread_awake(int time)
+{
+  struct list_elem *iterator = list_begin(&sleep_list);
+ 
+  while(iterator != list_end(&sleep_list))
+  {
+    struct thread *t = list_entry(iterator, struct thread, sleepelem);
+    if(t->sleep_time <= time)
+    {
+      iterator = list_remove(iterator);
+      thread_unblock(t);
+    }
+    else
+    {
+      iterator = list_next(iterator);
+    }
+  }  
+}
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
