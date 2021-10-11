@@ -365,8 +365,11 @@ thread_set_nice (int nice UNUSED)
 {
   /* Not yet implemented. */
   enum intr_level old_level = intr_disable();
-  thread_current()->nice = nice;
-  mlfqs_update_priority(thread_current());
+
+  struct thread* cur = thread_current();
+  cur->nice = nice;
+  //mlfqs_update_priority(thread_current());
+  cur->priority = mlfqs_calculate_priority(cur->recent_cpu, cur->nice);
   preemption();
   intr_set_level(old_level);
 }
@@ -388,7 +391,7 @@ thread_get_load_avg (void)
 {
   /* implemented. */
   enum intr_level old_level = intr_disable();
-  int load_avg_value = fp_to_int_round(mult_mix(load_avg,100));
+  int load_avg_value = x_to_int_round(mul_xn(load_avg,100));
   intr_set_level(old_level);
   return load_avg_value;
 }
@@ -399,7 +402,7 @@ thread_get_recent_cpu (void)
 {
   /* implemented. */
   enum intr_level old_level = intr_disable();
-  int recent_cpu = fp_to_int_round(mult_mix(thread_current()->recent_cpu, 100));
+  int recent_cpu = x_to_int_round(mul_xn(thread_current()->recent_cpu, 100));
   intr_set_level(old_level);
   return recent_cpu;
 }
@@ -685,37 +688,23 @@ priority_donation(struct thread *t)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-
-void
-mlfqs_recent_cpu(void)
+int mlfqs_update_recent_cpu(int recent_cpu)
 {
-  if(thread_current() == idle_thread) return;
-  
-  thread_current()->recent_cpu = add_mix(thread_current()->recent_cpu, 1);
+  return add_xn(recent_cpu, 1);
 }
 
-void
-mlfqs_update_priority(struct thread* t)
+int
+mlfqs_calculate_priority(int recent_cpu, int nice)
 {
-  if(t == idle_thread) return;
-
-  t->priority = fp_to_int(add_mix(div_mix(t->recent_cpu, -4), PRI_MAX - t->nice * 2));
+  return x_to_int(add_xn(div_xn(recent_cpu, -4), PRI_MAX - nice * 2));
 }
 
-void
-mlfqs_update_recent_cpu(struct thread* t)
+int
+mlfqs_calculate_recent_cpu(int recent_cpu, int nice)
 {
-  if(t == idle_thread) return;
-
-  //int temp = mult_mix(load_avg, 2);
-  //temp = div_fp(load_avg, add_mix(load_avg, 1));
-  //temp = mult_fp(temp, t->recent_cpu);
-  //temp = add_mix(temp, t->nice);
-  
-  //t->recent_cpu = temp;
-
-  t->recent_cpu = add_mix(mult_fp(div_fp(mult_mix(load_avg,2), add_mix(mult_mix(load_avg, 2), 1)), t->recent_cpu), t->nice);
+  return add_xn(mul_xy(div_xy(mul_xn(load_avg, 2), add_xn(mul_xn(load_avg, 2), 1)), recent_cpu), nice);
 }
+
 
 void
 mlfqs_update_load_avg(void)
@@ -725,61 +714,24 @@ mlfqs_update_load_avg(void)
   if(thread_current() != idle_thread)
     ready_threads++;
 
-  //int temp = div_fp(int_to_fp(59), int_to_fp(60));
-  //temp = mult_fp(temp, load_avg);
-  //temp = add_fp(temp, mult_mix(div_fp(int_to_fp(1), int_to_fp(60)), ready_threads));
+  int temp = div_xy(n_to_fp(59), n_to_fp(60));
+  temp = mul_xy(temp, load_avg);
+  temp = add_xy(temp, mul_xn(div_xy(n_to_fp(1), n_to_fp(60)), ready_threads));
 
-  //load_avg = temp;
-
-  load_avg = add_fp(mult_fp(div_fp(int_to_fp(59), int_to_fp(60)), load_avg), mult_mix(div_fp(int_to_fp(1), int_to_fp(60)), ready_threads));
-
+  load_avg = temp;
 }
 
-void
-mlfqs_recalculate_recent_cpu(void)
+struct list_elem* thread_get_all_list_begin(void)
 {
-  struct list_elem* e = list_begin(&all_list);
-
-  /*  
-  for(; e != list_end(&all_list); e = list_next(e))
-  {
-    struct thread* t = list_entry(e, struct thread, allelem);
-    mlfqs_update_recent_cpu(t);
-  } 
-  */
-   
-  //while(e == list_begin(&all_list) || e != list_end(&all_list))
-  while(e != list_end(&all_list))
-  {
-    struct thread* t = list_entry(e, struct thread, allelem);
-    mlfqs_update_recent_cpu(t);
-   
-    e = list_next(e);
-  }
-  
-  
+  return list_begin(&all_list);
 }
 
-
-void
-mlfqs_recalculate_priority(void)
+struct list_elem* thread_get_all_list_end(void)
 {
-  struct list_elem* e = list_begin(&all_list);
-  /*
-  for(; e != list_end(&all_list); e = list_next(e))
-  {
-    struct thread* t = list_entry(e, struct thread, allelem);
-    mlfqs_update_priority(t);
-  }
-  */
-  
-  //while(e == list_begin(&all_list) || e != list_end(&all_list))
-  while(e != list_end(&all_list))
-  {
-    struct thread* t = list_entry(e, struct thread, allelem);
-    mlfqs_update_priority(t);
-   
-    e = list_next(e);
-  }
- 
+  return list_end(&all_list);
 }
+
+bool thread_idle_thread(struct thread* t)
+{
+  return t == idle_thread;
+}  

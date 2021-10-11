@@ -90,7 +90,7 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-
+  
   ASSERT (intr_get_level () == INTR_ON);
   while (timer_elapsed (start) < ticks) 
     thread_yield ();
@@ -172,6 +172,34 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  if(thread_mlfqs)
+  {
+    if(!thread_idle_thread(thread_current()))
+      thread_current()->recent_cpu = mlfqs_update_recent_cpu(thread_current()->recent_cpu);
+
+
+    struct list_elem* elem = thread_get_all_list_begin();
+    
+    while(elem != thread_get_all_list_end())
+    {
+      struct thread* t = list_entry(elem, struct thread, allelem);
+     
+      if(!thread_idle_thread(t))
+      {
+        if(ticks % 4 == 0)
+          t->priority = mlfqs_calculate_priority(t->recent_cpu, t->nice);
+
+        if(ticks % TIMER_FREQ == 0)
+          t->recent_cpu = mlfqs_calculate_recent_cpu(t->recent_cpu, t->nice);
+      }
+     
+      elem = list_next(elem);
+    }
+    
+    if(ticks % TIMER_FREQ == 0)
+      mlfqs_update_load_avg();
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

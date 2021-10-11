@@ -158,11 +158,13 @@ void change_priority(struct thread *t);
 void priority_donation(struct thread *t);
 
 /* mlfqs */
-void mlfqs_update_priority(struct thread* t);
-void mlfqs_update_recent_cpu(struct thread* t);
+int mlfqs_update_recent_cpu(int recent_cpu);
+int mlfqs_calculate_priority(int recent_cpu, int nice);
+int mlfqs_calculate_recent_cpu(int recent_cpu, int nice);
 void mlfqs_update_load_avg(void);
-void mlfqs_recent_cpu(void);
-void mlfqs_recalculate_recent_cpu(void);
-void mlfqs_recalculate_priority(void);
+
+struct list_elem* thread_get_all_list_begin(void);
+struct list_elem* thread_get_all_list_end(void);
+bool thread_idle_thread(struct thread* t);
 
 #endif /* threads/thread.h */
