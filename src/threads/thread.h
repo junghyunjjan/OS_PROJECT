@@ -105,6 +105,10 @@ struct thread
     struct list donation_thread_list;
     struct list_elem donation_thread_elem;
 
+    /* Additional members for alarm clock. */
+    int sleep_time;
+    struct list_elem sleepelem;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -150,6 +154,10 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+/* Alarm Clock */
+void thread_sleep(int time);
+void thread_awake(int time);
+
 /* Priority Scheduler */
 void preemption(void);
 bool priority_compare(const struct list_elem *a_, const struct list_elem *b_, void *aux);
@@ -167,4 +175,4 @@ struct list_elem* thread_get_all_list_begin(void);
 struct list_elem* thread_get_all_list_end(void);
 bool thread_idle_thread(struct thread* t);
 
-#endif /* threads/thread.h */
+#endif /* THREADS/THREAD.H */
