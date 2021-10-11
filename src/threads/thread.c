@@ -363,7 +363,7 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  /* implemented. */
   enum intr_level old_level = intr_disable();
 
   struct thread* cur = thread_current();
