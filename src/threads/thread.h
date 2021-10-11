@@ -23,7 +23,9 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
-
+#define NICE_DEFAULT 0
+#define LOAD_AVERAGE_DEFAULT 0
+#define RECENT_CPU_DEFAULT 0
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -90,6 +92,9 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    int nice;
+    int recent_cpu;
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -151,5 +156,13 @@ bool priority_compare(const struct list_elem *a_, const struct list_elem *b_, vo
 bool donation_priority_compare(const struct list_elem *a_, const struct list_elem *b_, void *aux);
 void change_priority(struct thread *t);
 void priority_donation(struct thread *t);
+
+/* mlfqs */
+void mlfqs_update_priority(struct thread* t);
+void mlfqs_update_recent_cpu(struct thread* t);
+void mlfqs_update_load_avg(void);
+void mlfqs_recent_cpu(void);
+void mlfqs_recalculate_recent_cpu(void);
+void mlfqs_recalculate_priority(void);
 
 #endif /* threads/thread.h */
