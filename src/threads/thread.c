@@ -29,11 +29,8 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
-<<<<<<< HEAD
-=======
 /* List of processes which is sleeping. */
 static struct list sleep_list;
->>>>>>> 6206d0ccda838839d046d6ffbf8f6d10169dfdb4
 
 /* Idle thread. */
 static struct thread *idle_thread;
