@@ -368,7 +368,6 @@ thread_set_nice (int nice UNUSED)
 
   struct thread* cur = thread_current();
   cur->nice = nice;
-  //mlfqs_update_priority(thread_current());
   cur->priority = mlfqs_calculate_priority(cur->recent_cpu, cur->nice);
   preemption();
   intr_set_level(old_level);
