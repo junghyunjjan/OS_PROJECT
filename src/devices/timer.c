@@ -181,7 +181,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
     if(!thread_idle_thread(thread_current()))
       thread_current()->recent_cpu = mlfqs_update_recent_cpu(thread_current()->recent_cpu);
 
-
+    if(ticks % TIMER_FREQ == 0)
+      mlfqs_update_load_avg();
     struct list_elem* elem = thread_get_all_list_begin();
     
     while(elem != thread_get_all_list_end())
@@ -190,22 +191,17 @@ timer_interrupt (struct intr_frame *args UNUSED)
      
       if(!thread_idle_thread(t))
       {
+	if(ticks % TIMER_FREQ == 0)
+          t->recent_cpu = mlfqs_calculate_recent_cpu(t->recent_cpu, t->nice);
         if(ticks % 4 == 0)
           t->priority = mlfqs_calculate_priority(t->recent_cpu, t->nice);
-
-        if(ticks % TIMER_FREQ == 0)
-          t->recent_cpu = mlfqs_calculate_recent_cpu(t->recent_cpu, t->nice);
       }
      
       elem = list_next(elem);
     }
-    
-    if(ticks % TIMER_FREQ == 0)
-      mlfqs_update_load_avg();
   }
 
-  int64_t time_now = timer_ticks();
-  thread_awake (time_now);
+  thread_awake (ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

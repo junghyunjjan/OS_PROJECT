@@ -251,6 +251,7 @@ lock_release (struct lock *lock)
 {
   if(thread_mlfqs)
   {
+    lock->holder = NULL;
     sema_up(&lock->semaphore);
     return;
   }
@@ -268,9 +269,10 @@ lock_release (struct lock *lock)
     {
       list_remove(&t->donation_thread_elem);
       t->donating_thread = NULL;
-      change_priority(cur);
+      //change_priority(cur);
     }
   }
+  change_priority(cur);
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
