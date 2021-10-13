@@ -183,6 +183,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
     if(ticks % TIMER_FREQ == 0)
       mlfqs_update_load_avg();
+
     struct list_elem* elem = thread_get_all_list_begin();
     
     while(elem != thread_get_all_list_end())
@@ -199,6 +200,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
      
       elem = list_next(elem);
     }
+    
+    mlfqs_sort_ready_list();
   }
 
   thread_awake (ticks);

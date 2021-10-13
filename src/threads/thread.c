@@ -490,18 +490,20 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
 
+  t->nice = NICE_DEFAULT;
+  t->recent_cpu = RECENT_CPU_DEFAULT;
+
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
   t->initial_priority = priority;
   t->magic = THREAD_MAGIC;
   t->holded_lock = NULL;
   t->sleep_time = -1;
 
-  t->nice = NICE_DEFAULT;
-  t->recent_cpu = RECENT_CPU_DEFAULT;
+  if(thread_mlfqs) t->priority = mlfqs_calculate_priority(t->recent_cpu, t->nice);
+  else t->priority = priority;
 
   old_level = intr_disable ();
   list_init(&t->donation_thread_list);
@@ -758,6 +760,12 @@ mlfqs_update_load_avg(void)
   temp = add_xy(temp, mul_xn(div_xy(n_to_fp(1), n_to_fp(60)), ready_threads));
 
   load_avg = temp;
+}
+
+void
+mlfqs_sort_ready_list(void)
+{
+  list_sort(&ready_list, priority_compare, NULL);
 }
 
 struct list_elem* thread_get_all_list_begin(void)

@@ -170,6 +170,7 @@ int mlfqs_update_recent_cpu(int recent_cpu);
 int mlfqs_calculate_priority(int recent_cpu, int nice);
 int mlfqs_calculate_recent_cpu(int recent_cpu, int nice);
 void mlfqs_update_load_avg(void);
+void mlfqs_sort_ready_list(void);
 
 struct list_elem* thread_get_all_list_begin(void);
 struct list_elem* thread_get_all_list_end(void);
