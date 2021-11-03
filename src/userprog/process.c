@@ -45,6 +45,37 @@ process_execute (const char *file_name)
   return tid;
 }
 
+void
+parse_commandline(char* cmd_line, char*** argv, int* argc)
+{
+  char* return_ptr;
+  char* next_ptr = cmd_line;
+
+
+  do
+  {
+    return_ptr = strtok_r(next_ptr, " ", &next_ptr);
+    (*argc)++;
+  } while(return_ptr != NULL)
+
+
+  *argv = (char**)malloc(sizeof(char*) * (*argc));
+
+  int num = 0;
+
+  do
+  {
+    return_ptr = strtok_r(cmd_line, " ", &next_ptr);
+    //strcpy((*argv)[num++], return_ptr); // ?
+    //(*argv)[num++] = return_ptr;        // ?
+  } while(return_ptr != NULL)
+
+
+  ASSERT(num != *argv);
+
+  (*argc)--; // ?
+}
+
 /* A thread function that loads a user process and starts it
    running. */
 static void
@@ -59,7 +90,62 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+
+  char* return_ptr;////////////////////////////////////////////////////
+  char* argv_start;
+  char* save_cmd = (char*)malloc(sizeof(char) * (strlen(file_name) + 1));
+
+  strcpy(save_cmd, file_name);
+  return_ptr = strtok_r(file_name, " ", &argv_start);//////////////////
+ 
   success = load (file_name, &if_.eip, &if_.esp);
+
+  if(success)
+  {
+    void** esp = &if_.esp;
+
+    char** argv;
+    int argc = 0;
+
+    parse_commandline(save_cmd, &argv, &argc); // will malloc argv
+
+    int length;
+    
+    for(int i = argc - 1; i >= 0; i--) // putting commands, without word align
+    {
+      length = strlen(argv[i]) + 1;
+      *esp = *esp - length;
+      memcpy(*esp, argv[i], length);
+      argv[i] = *esp;
+    }
+
+    while((PHYS_BASE - *esp) % 4 != 0) // word align
+    {
+      *esp -= sizeof(uint8_t);
+      **(uint8_t**)esp = (uint8_t)0;
+    }
+
+    *esp -= sizeof(char*);
+    **(char***)esp = (char*)NULL; // don't know why exists, but manual said it should
+
+    for(int i = argc - 1; i >= 0; i--) // putting address of argv[i]
+    {
+      *esp -= sizeof(char*);
+      **(char***)esp = argv[i];
+    }
+
+    *esp -= sizeof(char**);
+    **(char****)esp = *esp + 4; // put address of argv stored on the stack, not original argv
+
+    *esp -= sizeof(int); // argc
+    **(int**)esp = argc;
+
+    *esp -= sizeof(void*); // put return pointer, default is NULL
+    **(void***)esp = NULL;
+
+    free(argv);
+  }
+  free(save_cmd);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
