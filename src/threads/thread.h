@@ -110,6 +110,8 @@ struct thread
 
 #endif
 
+    int exit_code; //// added
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
