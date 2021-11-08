@@ -18,8 +18,47 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "threads/synch.h"
+#include "syscall.h"
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+
+
+void
+parse_commandline(char* cmd_line, char* (*argv)[32], int* argc)
+{
+  char* return_ptr;
+  char* next_ptr;
+  char* next = cmd_line;
+
+  do
+  {
+    return_ptr = strtok_r(next, " ", &next_ptr);
+    (*argc)++;
+    next = next_ptr;
+  } while(return_ptr != NULL);
+
+  //printf("argc: %d\n", *argc);
+  //*argv = (char**)malloc(sizeof(char*) * (*argc)); // malloc doesn't exist in stdlib.h
+
+  int num = 0;
+  
+  do
+  {
+    return_ptr = strtok_r(cmd_line, " ", &next_ptr);
+    //strcpy((*argv)[num++], return_ptr); // ?
+    //(*argv)[num++];
+    (*argv)[num++] = return_ptr;        // ?
+    if(*next_ptr == '\0') next_ptr++;
+    cmd_line = next_ptr;
+  } while(num != *argc);
+
+
+  ASSERT(num == *argc);
+
+  (*argc)--; // ?
+}
+
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -35,46 +74,33 @@ process_execute (const char *file_name)
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
+  {
     return TID_ERROR;
+  }
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  char file_to_execute[256];
+  char* next_ptr;
+
+  strlcpy(file_to_execute, file_name, 255);
+
+  strtok_r(file_to_execute, " ", &next_ptr);
+
+  if(filesys_open(file_to_execute) == NULL) 
+  {
+    return -1;
+  }
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (file_to_execute, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  {
+    palloc_free_page (fn_copy);
+  }
+
   return tid;
 }
 
-void
-parse_commandline(char* cmd_line, char*** argv, int* argc)
-{
-  char* return_ptr;
-  char* next_ptr = cmd_line;
-
-
-  do
-  {
-    return_ptr = strtok_r(next_ptr, " ", &next_ptr);
-    (*argc)++;
-  } while(return_ptr != NULL)
-
-
-  *argv = (char**)malloc(sizeof(char*) * (*argc));
-
-  int num = 0;
-
-  do
-  {
-    return_ptr = strtok_r(cmd_line, " ", &next_ptr);
-    //strcpy((*argv)[num++], return_ptr); // ?
-    //(*argv)[num++] = return_ptr;        // ?
-  } while(return_ptr != NULL)
-
-
-  ASSERT(num != *argv);
-
-  (*argc)--; // ?
-}
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -91,32 +117,29 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  char* return_ptr;////////////////////////////////////////////////////
-  char* argv_start;
-  char* save_cmd = (char*)malloc(sizeof(char) * (strlen(file_name) + 1));
+  char* argv[32]; // i couldn't find the suggested length of argv, might be changed
+  int argc = 0;
 
-  strcpy(save_cmd, file_name);
-  return_ptr = strtok_r(file_name, " ", &argv_start);//////////////////
- 
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  parse_commandline(file_name, &argv, &argc); // this will malloc argv -> malloc doesn't exist in stdlib.h, so it will not malloc
+						//also, file_name will be changed, ' ' into '\0'
+
+
+  success = load (argv[0], &if_.eip, &if_.esp);
+
 
   if(success)
   {
     void** esp = &if_.esp;
-
-    char** argv;
-    int argc = 0;
-
-    parse_commandline(save_cmd, &argv, &argc); // will malloc argv
 
     int length;
     
     for(int i = argc - 1; i >= 0; i--) // putting commands, without word align
     {
       length = strlen(argv[i]) + 1;
-      *esp = *esp - length;
-      memcpy(*esp, argv[i], length);
-      argv[i] = *esp;
+      *esp = *esp - (sizeof(char)) * length;
+      strlcpy(*(char**)esp, argv[i], length + 1);
+      argv[i] = *(char**)esp;
     }
 
     while((PHYS_BASE - *esp) % 4 != 0) // word align
@@ -135,17 +158,15 @@ start_process (void *file_name_)
     }
 
     *esp -= sizeof(char**);
-    **(char****)esp = *esp + 4; // put address of argv stored on the stack, not original argv
+    **(char****)esp = *esp + sizeof(char**); // put address of argv stored on the stack, not original argv
 
     *esp -= sizeof(int); // argc
     **(int**)esp = argc;
 
     *esp -= sizeof(void*); // put return pointer, default is NULL
     **(void***)esp = NULL;
-
-    free(argv);
   }
-  free(save_cmd);
+  //free(argv);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -174,7 +195,30 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  struct thread* cur = thread_current();
+  struct list_elem* child_elem = list_begin(&(cur->children));
+  struct thread* child_thread;
+  int exit_code = -1;
+
+  while(child_elem != list_end(&(cur->children)))
+  {
+    child_thread = list_entry(child_elem, struct thread, child);
+ 
+    if(child_thread->tid == child_tid)
+    {
+      sema_down(&(child_thread->child_lock));
+      exit_code = child_thread->exit_code;
+      list_remove(&(child_thread->child));
+      sema_up(&(child_thread->memory_lock)); 
+      break;
+    }
+
+    child_elem = list_next(child_elem);
+  }
+
+  return exit_code;
+
+  //return -1;
 }
 
 /* Free the current process's resources. */
@@ -200,6 +244,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  sema_up(&(cur->child_lock));
+  sema_down(&(cur->memory_lock));
 }
 
 /* Sets up the CPU for running user code in the current
