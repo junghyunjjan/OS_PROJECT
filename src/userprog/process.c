@@ -107,14 +107,14 @@ process_execute (const char *file_name)
   while(child_elem != list_end(&(cur->children)))
   {
     child_thread = list_entry(child_elem, struct thread, child);
+
+    if(child_thread->tid == tid)
+      sema_down(&(child_thread->wait_child_load_lock)); // wait for child finish its loading
  
     if(child_thread->load_failed) // if some of its child failed loading, remove it from children
     {
       process_wait(child_thread->tid);
     }
-
-    if(child_thread->tid == tid)
-      sema_down(&(child_thread->wait_child_load_lock)); // wait for child finish its loading
 
     child_elem = list_next(child_elem);
   }
