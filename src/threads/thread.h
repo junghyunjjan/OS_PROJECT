@@ -106,7 +106,9 @@ struct thread
 
     struct semaphore child_lock;
     struct semaphore memory_lock;
+    struct semaphore wait_child_load_lock;
 
+    int load_failed;
 
 #endif
 

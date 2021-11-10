@@ -98,6 +98,29 @@ process_execute (const char *file_name)
     palloc_free_page (fn_copy);
   }
 
+  
+
+  struct thread* cur = thread_current();
+  struct list_elem* child_elem = list_begin(&(cur->children));
+  struct thread* child_thread;
+
+  while(child_elem != list_end(&(cur->children)))
+  {
+    child_thread = list_entry(child_elem, struct thread, child);
+ 
+    if(child_thread->load_failed) // if some of its child failed loading, remove it from children
+    {
+      process_wait(child_thread->tid);
+    }
+
+    if(child_thread->tid == tid)
+      sema_down(&(child_thread->wait_child_load_lock)); // wait for child finish its loading
+
+    child_elem = list_next(child_elem);
+  }
+
+
+
   return tid;
 }
 
@@ -123,7 +146,7 @@ start_process (void *file_name_)
 
   parse_commandline(file_name, &argv, &argc); // this will malloc argv -> malloc doesn't exist in stdlib.h, so it will not malloc
 						//also, file_name will be changed, ' ' into '\0'
-
+						//maximum length of each argv[i] is 255
 
   success = load (argv[0], &if_.eip, &if_.esp);
 
@@ -168,10 +191,16 @@ start_process (void *file_name_)
   }
   //free(argv);
 
+  sema_up(&(thread_current()->wait_child_load_lock)); // announce its parent that child finished loading
+
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  if (!success)
+  {
+    thread_current()->load_failed = 1;
+    sys_exit(-1);
+    //thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -206,10 +235,10 @@ process_wait (tid_t child_tid UNUSED)
  
     if(child_thread->tid == child_tid)
     {
-      sema_down(&(child_thread->child_lock));
+      sema_down(&(child_thread->child_lock)); // wait for child to be finished
       exit_code = child_thread->exit_code;
       list_remove(&(child_thread->child));
-      sema_up(&(child_thread->memory_lock)); 
+      sema_up(&(child_thread->memory_lock)); // tell its child that parent finished removing that child
       break;
     }
 
@@ -244,8 +273,8 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  sema_up(&(cur->child_lock));
-  sema_down(&(cur->memory_lock));
+  sema_up(&(cur->child_lock)); // announce that this process is now terminated
+  sema_down(&(cur->memory_lock)); // wait for parent to finish this child thread from parents child list(=children)
 }
 
 /* Sets up the CPU for running user code in the current
