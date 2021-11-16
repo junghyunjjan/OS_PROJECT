@@ -98,6 +98,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct file* fd[128];
 
     int exit_code; //// added
 
@@ -107,8 +108,6 @@ struct thread
     struct semaphore child_lock;
     struct semaphore memory_lock;
     struct semaphore wait_child_load_lock;
-
-    int load_failed;
 
 #endif
 

@@ -471,7 +471,8 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&(t->children));
   list_push_back(&(running_thread()->children), &(t->child));
 
-  t->load_failed = 0;
+  for(int i = 0; i < 128; i++)
+    t->fd[i] = NULL;
 #endif
 
 

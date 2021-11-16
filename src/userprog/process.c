@@ -20,9 +20,9 @@
 
 #include "threads/synch.h"
 #include "syscall.h"
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-
 
 void
 parse_commandline(char* cmd_line, char* (*argv)[32], int* argc)
@@ -34,31 +34,12 @@ parse_commandline(char* cmd_line, char* (*argv)[32], int* argc)
   do
   {
     return_ptr = strtok_r(next, " ", &next_ptr);
-    (*argc)++;
+    (*argv)[(*argc)++] = return_ptr;
     next = next_ptr;
-  } while(return_ptr != NULL);
+  }while(return_ptr!=NULL);
 
-  //printf("argc: %d\n", *argc);
-  //*argv = (char**)malloc(sizeof(char*) * (*argc)); // malloc doesn't exist in stdlib.h
-
-  int num = 0;
-  
-  do
-  {
-    return_ptr = strtok_r(cmd_line, " ", &next_ptr);
-    //strcpy((*argv)[num++], return_ptr); // ?
-    //(*argv)[num++];
-    (*argv)[num++] = return_ptr;        // ?
-    if(*next_ptr == '\0') next_ptr++;
-    cmd_line = next_ptr;
-  } while(num != *argc);
-
-
-  ASSERT(num == *argc);
-
-  (*argc)--; // ?
+  (*argc)--;
 }
-
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -74,56 +55,49 @@ process_execute (const char *file_name)
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
-  {
     return TID_ERROR;
-  }
   strlcpy (fn_copy, file_name, PGSIZE);
 
   char file_to_execute[256];
   char* next_ptr;
-
+  
   strlcpy(file_to_execute, file_name, 255);
-
   strtok_r(file_to_execute, " ", &next_ptr);
 
-  if(filesys_open(file_to_execute) == NULL) 
-  {
+  if(filesys_open(file_to_execute) == NULL)
     return -1;
-  }
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_to_execute, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
-  {
-    palloc_free_page (fn_copy);
-  }
-
-  
+    palloc_free_page (fn_copy); 
 
   struct thread* cur = thread_current();
   struct list_elem* child_elem = list_begin(&(cur->children));
   struct thread* child_thread;
+  int result = -1;
+  bool child_error = false;
 
   while(child_elem != list_end(&(cur->children)))
   {
     child_thread = list_entry(child_elem, struct thread, child);
-
+  
     if(child_thread->tid == tid)
-      sema_down(&(child_thread->wait_child_load_lock)); // wait for child finish its loading
- 
-    if(child_thread->load_failed) // if some of its child failed loading, remove it from children
+      sema_down(&(child_thread->wait_child_load_lock));
+    if(child_thread->exit_code==-1)
     {
-      process_wait(child_thread->tid);
+      int temp = process_wait(child_thread->tid);
+      if(child_thread->tid == tid) 
+      {
+        result = temp;
+        child_error = true;
+      }
     }
-
     child_elem = list_next(child_elem);
   }
-
-
-
+  if(child_error) return result;
   return tid;
 }
-
 
 /* A thread function that loads a user process and starts it
    running. */
@@ -140,68 +114,61 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  char* argv[32]; // i couldn't find the suggested length of argv, might be changed
+  char* argv[32];
   int argc = 0;
 
-
-  parse_commandline(file_name, &argv, &argc); // this will malloc argv -> malloc doesn't exist in stdlib.h, so it will not malloc
-						//also, file_name will be changed, ' ' into '\0'
-						//maximum length of each argv[i] is 255
+  parse_commandline(file_name, &argv, &argc);
 
   success = load (argv[0], &if_.eip, &if_.esp);
-
 
   if(success)
   {
     void** esp = &if_.esp;
-
     int length;
+    int i;
     
-    for(int i = argc - 1; i >= 0; i--) // putting commands, without word align
+    for(i = argc - 1; i >= 0; i--)
     {
       length = strlen(argv[i]) + 1;
       *esp = *esp - (sizeof(char)) * length;
-      strlcpy(*(char**)esp, argv[i], length + 1);
+      strlcpy(*(char**)esp, argv[i], length +1);
       argv[i] = *(char**)esp;
     }
-
-    while((PHYS_BASE - *esp) % 4 != 0) // word align
+    
+    while((PHYS_BASE - *esp) % 4 != 0)
     {
       *esp -= sizeof(uint8_t);
       **(uint8_t**)esp = (uint8_t)0;
     }
 
     *esp -= sizeof(char*);
-    **(char***)esp = (char*)NULL; // don't know why exists, but manual said it should
+    **(char***)esp = (char*)NULL;
 
-    for(int i = argc - 1; i >= 0; i--) // putting address of argv[i]
+    for(i = argc - 1; i >= 0; i--)
     {
       *esp -= sizeof(char*);
       **(char***)esp = argv[i];
     }
 
     *esp -= sizeof(char**);
-    **(char****)esp = *esp + sizeof(char**); // put address of argv stored on the stack, not original argv
+    **(char****)esp = *esp + sizeof(char**);
 
-    *esp -= sizeof(int); // argc
+    *esp -= sizeof(int);
     **(int**)esp = argc;
 
-    *esp -= sizeof(void*); // put return pointer, default is NULL
+    *esp -= sizeof(void*);
     **(void***)esp = NULL;
-  }
-  //free(argv);
 
-  sema_up(&(thread_current()->wait_child_load_lock)); // announce its parent that child finished loading
+  }
+
+  sema_up(&(thread_current()->wait_child_load_lock));
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success)
+  if (!success) 
   {
-    thread_current()->load_failed = 1;
     sys_exit(-1);
-    //thread_exit ();
   }
-
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -232,22 +199,19 @@ process_wait (tid_t child_tid UNUSED)
   while(child_elem != list_end(&(cur->children)))
   {
     child_thread = list_entry(child_elem, struct thread, child);
- 
+    
     if(child_thread->tid == child_tid)
     {
-      sema_down(&(child_thread->child_lock)); // wait for child to be finished
+      sema_down(&(child_thread->child_lock));
       exit_code = child_thread->exit_code;
       list_remove(&(child_thread->child));
-      sema_up(&(child_thread->memory_lock)); // tell its child that parent finished removing that child
+      sema_up(&(child_thread->memory_lock));
       break;
     }
-
+    
     child_elem = list_next(child_elem);
   }
-
   return exit_code;
-
-  //return -1;
 }
 
 /* Free the current process's resources. */
@@ -272,9 +236,24 @@ process_exit (void)
       cur->pagedir = NULL;
       pagedir_activate (NULL);
       pagedir_destroy (pd);
+   }
+  struct list_elem* child_elem = list_begin(&cur->children);
+  struct thread* child_thread;
+  int i;
+  while(child_elem != list_end(&cur->children))
+  {
+    child_thread = list_entry(child_elem, struct thread, child);
+    for(i = 3; i<128;i++)
+    {
+      if(child_thread->fd[i] != NULL)
+	sys_close(i);
     }
-  sema_up(&(cur->child_lock)); // announce that this process is now terminated
-  sema_down(&(cur->memory_lock)); // wait for parent to finish this child thread from parents child list(=children)
+    process_wait(child_thread->tid);
+    child_elem = list_next(child_elem);
+  }
+
+  sema_up(&(cur->child_lock));
+  sema_down(&(cur->memory_lock));
 }
 
 /* Sets up the CPU for running user code in the current
